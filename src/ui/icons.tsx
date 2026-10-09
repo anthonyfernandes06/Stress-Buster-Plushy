@@ -41,6 +41,16 @@ export const FlameIcon = () => (
   </Icon>
 );
 
+export const BlasterIcon = () => (
+  <Icon>
+    <path d="M4.5 8h11a1.5 1.5 0 0 1 1.5 1.5v2a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 11.5v-2A1.5 1.5 0 0 1 4.5 8z" />
+    <path d="M17 9.25h3.5v2.5H17" />
+    <path d="M5.5 13l-1.3 6.3a.8.8 0 0 0 .8 1h2.6a.8.8 0 0 0 .8-.65L9.5 13" />
+    <path d="M9.6 13v1.4a1.6 1.6 0 0 0 1.6 1.6h1.3" />
+    <path d="M7 8V6.5h5V8" />
+  </Icon>
+);
+
 export const ResetIcon = () => (
   <Icon>
     <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />

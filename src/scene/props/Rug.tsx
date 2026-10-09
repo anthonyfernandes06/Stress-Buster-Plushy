@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { MeshStandardMaterial, Vector2 } from 'three';
 import { fabricNormal, rugTexture } from '../textures';
 
-export const RUG = { x: -0.15, z: 0.3, r: 1.65 };
+export const RUG = { x: -0.15, z: -0.85, r: 1.75 };
 
 /** Round woven rug. Visual only: it is part of the floor physics-wise. */
 export function Rug() {

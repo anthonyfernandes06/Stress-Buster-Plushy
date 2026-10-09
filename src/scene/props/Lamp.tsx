@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { CylinderCollider, RigidBody, type CollisionEnterPayload, type RapierRigidBody } from '@react-three/rapier';
 import { DoubleSide, MeshStandardMaterial, PointLight } from 'three';
+import { ROOM } from '../../config';
 import { runtime } from '../../state/runtime';
 import { useStore } from '../../state/store';
 import { sound } from '../../audio/SoundManager';
 import { bodyKind, impactSpeed, track, untrack } from '../physicsUtils';
 
-export const LAMP = { x: -3.3, z: -3.3 };
+export const LAMP = { x: -ROOM.halfWidth + 0.62, z: ROOM.back + 0.62 };
 const BASE_INTENSITY = 5.5;
 
 /** Floor lamp with a heavy base: wobbles, can topple, flickers when hit. */

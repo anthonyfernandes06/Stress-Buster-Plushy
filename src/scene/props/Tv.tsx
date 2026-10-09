@@ -281,7 +281,7 @@ class Screen {
 
 /** Wall-mounted TV whose screen shows the stress meter. */
 export function Tv() {
-  const z = -ROOM.half + 0.06;
+  const z = ROOM.back + 0.06;
   const screen = useMemo(() => new Screen(), []);
   const bezel = useMemo(() => new MeshStandardMaterial({ color: '#2B2724', roughness: 0.4, metalness: 0.1 }), []);
 

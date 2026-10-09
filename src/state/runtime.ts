@@ -6,7 +6,7 @@ import type { RapierRigidBody } from '@react-three/rapier';
  * Anything that changes every frame lives here instead of in zustand.
  */
 
-export type ReactionLevel = 'light' | 'medium' | 'heavy' | 'punch' | 'bat';
+export type ReactionLevel = 'light' | 'medium' | 'heavy' | 'punch' | 'bat' | 'shot';
 
 export interface PlushyPart {
   index: number;
@@ -57,6 +57,12 @@ export interface FxEmitters {
   sparks(point: Vector3, count: number): void;
 }
 
+/** A wall segment on the floor plane (x, z), used for the invisible view boundary. */
+export interface ViewSegment {
+  a: [number, number];
+  b: [number, number];
+}
+
 const noop = () => {};
 
 export const runtime = {
@@ -75,6 +81,11 @@ export const runtime = {
     down: false,
   },
   camera: null as PerspectiveCamera | null,
+  /** Visible play area, recomputed by the camera rig whenever the window resizes. */
+  view: {
+    /** Front edge of the playable floor (largest z the octopus may be carried to). */
+    frontZ: 1.4,
+  },
   plushy: null as PlushyHandle | null,
   props: {} as PropHandles,
   fx: {

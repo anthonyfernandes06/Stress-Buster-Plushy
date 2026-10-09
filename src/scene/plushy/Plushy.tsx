@@ -10,7 +10,7 @@ import {
 } from '@react-three/rapier';
 import type { ImpulseJoint } from '@dimforge/rapier3d-compat';
 import { Color, ExtrudeGeometry, Group, MeshBasicMaterial, Object3D, PointLight, Quaternion, Ray, Shape, Sphere, Vector3 } from 'three';
-import { FIRE, IDLE, IMPACT, METER, PLUSHY, POUF_BOUNCE } from '../../config';
+import { FIRE, GUN, IDLE, IMPACT, METER, PLUSHY, POUF_BOUNCE, ROOM } from '../../config';
 import { addTrauma, haptic, hitStop, runtime, type PlushyHandle, type PlushyHit, type PlushyPart, type ReactionLevel } from '../../state/runtime';
 import { useStore } from '../../state/store';
 import { sound } from '../../audio/SoundManager';
@@ -135,6 +135,8 @@ export function Plushy() {
       combo: 0,
       lastPunch: -10,
       lastCounted: -10,
+      shotCombo: 0,
+      lastShot: -10,
       lastBoing: -10,
       quietUntil: 0, // self-caused motion (wave, hop): don't react to the landing
       impacts: [] as Impact[],
@@ -318,6 +320,24 @@ export function Plushy() {
         addTrauma(0.1);
         haptic(15);
         store.registerHit(0.4, 'punch');
+        break;
+      }
+      case 'shot': {
+        sim.shotCombo = now - sim.lastShot < GUN.comboWindow ? sim.shotCombo + 1 : 1;
+        sim.lastShot = now;
+        kickSquash(dir, 1.6);
+        if (sim.shotCombo >= GUN.comboDizzy) {
+          sim.xUntil = now + 0.9;
+          sim.dizzyUntil = now + 2.6;
+          sim.shotCombo = 0;
+        } else sim.squeezeUntil = Math.max(sim.squeezeUntil, now + 0.3);
+        if (Math.random() < 0.35) sound.play('squeak', { intensity: 0.45, pitch: 1 + Math.random() * 0.4 });
+        runtime.fx.fluff(point, Math.random() < 0.5 ? 2 : 3, 0.7);
+        runtime.fx.ring(point, dir, 0.34, 'pow');
+        sim.flash = Math.max(sim.flash, 0.15);
+        addTrauma(0.02);
+        haptic(10);
+        store.registerHit(0.25, 'shot');
         break;
       }
       case 'bat':
@@ -504,6 +524,8 @@ export function Plushy() {
   }, [layout]);
 
   // ------------------------------------------------------------------ reset
+  const resetPoseRef = useRef<() => void>(() => {});
+  const outside = useRef(0);
   useEffect(() => {
     const resetPose = () => {
       const base = new Vector3(spawn.x, 0.75 + PLUSHY.resetDropHeight, spawn.z);
@@ -543,6 +565,7 @@ export function Plushy() {
       runtime.idleTime = 0;
       setEye(sim.time);
     };
+    resetPoseRef.current = resetPose;
     return useStore.subscribe((s, prev) => {
       if (s.resetToken !== prev.resetToken) resetPose();
     });
@@ -623,6 +646,13 @@ export function Plushy() {
           break;
         case 'book':
           if (s > 1.5) sound.play('clatter', { intensity: Math.min(1, s / 7) });
+          break;
+        case 'screen':
+          // it smacked into the "glass" between the room and you
+          if (s > 3.5) {
+            addTrauma(Math.min(0.5, s * 0.05));
+            sound.play('thud', { intensity: Math.min(1, s / 8), pitch: 1.25 });
+          }
           break;
       }
     }
@@ -760,6 +790,21 @@ export function Plushy() {
     if (!head) return;
 
     processImpacts();
+
+    // safety net: if it ever ends up outside the visible room (e.g. the window
+    // was resized and the screen boundary moved past it), drop it back in
+    const hpos = head.position;
+    const out =
+      hpos.z > runtime.view.frontZ + 0.9 ||
+      Math.abs(hpos.x) > ROOM.halfWidth + 0.2 ||
+      hpos.y < -0.6 ||
+      hpos.y > ROOM.height + 0.6 ||
+      hpos.z < ROOM.back - 0.4;
+    outside.current = out && !sim.held ? outside.current + dt : 0;
+    if (outside.current > 0.6) {
+      outside.current = 0;
+      resetPoseRef.current();
+    }
 
     // held: tentacles wiggle
     if (sim.held && Math.random() < dt * 6) {

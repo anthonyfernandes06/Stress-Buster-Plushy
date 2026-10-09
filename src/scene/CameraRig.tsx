@@ -1,96 +1,77 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { PerspectiveCamera, Vector3 } from 'three';
-import { CAMERA, ROOM } from '../config';
-import { runtime } from '../state/runtime';
+import { PerspectiveCamera, Ray, Vector3 } from 'three';
+import { CAMERA, PLAY, ROOM } from '../config';
+import { runtime, type ViewSegment } from '../state/runtime';
+import { useStore } from '../state/store';
 import { useCameraShake } from './fx/useCameraShake';
 import { FX_LAYER } from './layers';
 
-const H = ROOM.half;
-const T = ROOM.wallThickness;
-/** Points that must stay in frame: floor slab corners and wall tops. */
-const FIT_POINTS = [
-  [-H - T, 0, -H - T],
-  [H, 0, -H - T],
-  [-H - T, 0, H],
-  [H, 0, H],
-  [H, -ROOM.floorThickness, H],
-  [-H - T, -ROOM.floorThickness, H],
-  [H, -ROOM.floorThickness, -H - T],
-  [-H - T, ROOM.wallHeight, -H - T],
-  [H, ROOM.wallHeight, -H - T],
-  [-H - T, ROOM.wallHeight, H],
-].map(([x, y, z]) => new Vector3(x, y, z));
-
-interface Insets {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
+/** Vertical FOV that keeps the horizontal FOV near CAMERA.hFov for this aspect. */
+export function verticalFov(aspect: number) {
+  const h = (CAMERA.hFov * Math.PI) / 360;
+  const v = (2 * Math.atan(Math.tan(h) / aspect) * 180) / Math.PI;
+  return Math.min(CAMERA.maxVFov, Math.max(CAMERA.minVFov, v));
 }
 
 /**
- * Fits the room into the viewport (minus UI insets, in px) by sliding the
- * camera along its fixed 3/4 view direction and re-centering the target.
+ * Works out which part of the floor is actually on screen and returns the
+ * invisible walls that keep the octopus inside it: one along the bottom of
+ * the screen (above the control bar) and, where the bottom corners don't
+ * reach the side walls, two diagonals up to the walls.
  */
-function frameRoom(width: number, height: number, insets: Insets, fov: number, margin: number) {
+function computeViewBounds(width: number, height: number, fov: number) {
   const cam = new PerspectiveCamera(fov, width / height, 0.1, 100);
-  const dir = new Vector3(...CAMERA.position).sub(new Vector3(...CAMERA.target)).normalize();
-  const target = new Vector3(...CAMERA.target);
-  const bx0 = -1 + (2 * insets.left) / width;
-  const bx1 = 1 - (2 * insets.right) / width;
-  const by0 = -1 + (2 * insets.bottom) / height;
-  const by1 = 1 - (2 * insets.top) / height;
-  const bw = (bx1 - bx0) * margin;
-  const bh = (by1 - by0) * margin;
-  const p = new Vector3();
-
-  const measure = (d: number) => {
-    cam.position.copy(target).addScaledVector(dir, d);
-    cam.lookAt(target);
-    cam.updateMatrixWorld(true);
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
-    for (const fp of FIT_POINTS) {
-      p.copy(fp).project(cam);
-      minX = Math.min(minX, p.x);
-      maxX = Math.max(maxX, p.x);
-      minY = Math.min(minY, p.y);
-      maxY = Math.max(maxY, p.y);
-    }
-    return { minX, maxX, minY, maxY };
+  cam.position.set(...CAMERA.position);
+  cam.lookAt(new Vector3(...CAMERA.target));
+  cam.updateMatrixWorld(true);
+  cam.updateProjectionMatrix();
+  const ray = new Ray();
+  const floorAt = (nx: number, ny: number) => {
+    ray.origin.setFromMatrixPosition(cam.matrixWorld);
+    ray.direction.set(nx, ny, 0.5).unproject(cam).sub(ray.origin).normalize();
+    if (ray.direction.y >= -1e-4) return null;
+    return ray.at(-ray.origin.y / ray.direction.y, new Vector3());
   };
+  const yb = -1 + (2 * CAMERA.bottomInsetPx) / height;
+  const inset = CAMERA.boundsInset;
+  const W = ROOM.halfWidth;
+  const segments: ViewSegment[] = [];
+  const bl = floorAt(-1, yb);
+  const br = floorAt(1, yb);
+  if (!bl || !br) return { segments, frontZ: 1.4 };
 
-  let d = 12;
-  for (let iter = 0; iter < 3; iter++) {
-    let lo = 3;
-    let hi = 80;
-    for (let i = 0; i < 30; i++) {
-      const mid = (lo + hi) / 2;
-      const m = measure(mid);
-      if (m.maxX - m.minX <= bw && m.maxY - m.minY <= bh) hi = mid;
-      else lo = mid;
-    }
-    d = hi;
-    // shift the target so the room's projected box centres in the free area
-    const m = measure(d);
-    const cx = (m.minX + m.maxX) / 2 - (bx0 + bx1) / 2;
-    const cy = (m.minY + m.maxY) / 2 - (by0 + by1) / 2;
-    const halfH = Math.tan((fov * Math.PI) / 360) * d;
-    const halfW = halfH * cam.aspect;
-    const right = new Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
-    const up = new Vector3().setFromMatrixColumn(cam.matrixWorld, 1);
-    target.addScaledVector(right, cx * halfW).addScaledVector(up, cy * halfH);
-  }
-  return { position: target.clone().addScaledVector(dir, d), target };
+  // pull everything a little into the room so a body against the wall stays in view
+  const front = (p: Vector3) => p.clone().setZ(p.z - inset);
+  const corner = (bottom: Vector3, side: -1 | 1) => {
+    // the screen's side edge is a straight line on the floor; follow it to the wall
+    const up = floorAt(side, yb + 0.35);
+    const b = front(bottom);
+    if (Math.abs(b.x) >= W || !up) return { start: b.setX(Math.max(-W, Math.min(W, b.x))), wall: null as Vector3 | null };
+    const dir = up.clone().sub(bottom);
+    const t = (side * W - bottom.x) / dir.x;
+    const wall = bottom.clone().addScaledVector(dir, t);
+    // shift the diagonal inward along its normal
+    const n = new Vector3(dir.z, 0, -dir.x).normalize();
+    if (n.x * side < 0) n.negate();
+    b.addScaledVector(n, -inset * 0.6);
+    wall.addScaledVector(n, -inset * 0.6).setX(side * W);
+    return { start: b, wall };
+  };
+  const L = corner(bl, -1);
+  const R = corner(br, 1);
+  segments.push({ a: [L.start.x, L.start.z], b: [R.start.x, R.start.z] });
+  if (L.wall) segments.push({ a: [L.wall.x, L.wall.z], b: [L.start.x, L.start.z] });
+  if (R.wall) segments.push({ a: [R.start.x, R.start.z], b: [R.wall.x, R.wall.z] });
+  const frontZ = Math.min(L.start.z, R.start.z) - 0.15;
+  return { segments, frontZ: Math.max(PLAY.minZ + 1, frontZ) };
 }
 
 export function CameraRig() {
   const camera = useThree((s) => s.camera) as PerspectiveCamera;
   const size = useThree((s) => s.size);
-  const base = useRef({ position: new Vector3(...CAMERA.position), target: new Vector3(...CAMERA.target) });
+  const setViewBounds = useStore((s) => s.setViewBounds);
+  const base = useMemo(() => ({ position: new Vector3(...CAMERA.position), target: new Vector3(...CAMERA.target) }), []);
   const parallax = useRef(new Vector3());
   const shake = useCameraShake();
   const tmp = useMemo(() => ({ right: new Vector3(), up: new Vector3() }), []);
@@ -100,24 +81,21 @@ export function CameraRig() {
   }, [camera]);
 
   useEffect(() => {
-    const portrait = size.width / size.height < 0.85;
-    const fov = portrait ? CAMERA.fovPortrait : CAMERA.fov;
-    const insets: Insets = portrait
-      ? { top: 64, right: 12, bottom: 150, left: 12 }
-      : { top: 64, right: 104, bottom: 92, left: 28 };
-    const margin = portrait ? CAMERA.fitMarginPortrait : CAMERA.fitMargin;
-    const f = frameRoom(size.width, size.height, insets, fov, margin);
-    base.current = f;
+    const fov = verticalFov(size.width / size.height);
     camera.fov = fov;
     camera.aspect = size.width / size.height;
+    camera.near = 0.1;
+    camera.far = 60;
     camera.updateProjectionMatrix();
-    camera.position.copy(f.position);
-    camera.lookAt(f.target);
-  }, [camera, size.width, size.height]);
+    camera.position.copy(base.position);
+    camera.lookAt(base.target);
+    const vb = computeViewBounds(size.width, size.height, fov);
+    runtime.view.frontZ = vb.frontZ;
+    setViewBounds(vb.segments);
+  }, [camera, size.width, size.height, base, setViewBounds]);
 
   useFrame((_, dt) => {
     const d = Math.min(dt, 0.05);
-    const { position, target } = base.current;
     // pointer parallax (eased, disabled for reduced motion)
     const p = runtime.pointer;
     const want = runtime.reducedMotion || !p.inside ? 0 : 1;
@@ -125,14 +103,14 @@ export function CameraRig() {
     parallax.current.x += (p.ndc.x * want - parallax.current.x) * k;
     parallax.current.y += (p.ndc.y * want - parallax.current.y) * k;
 
-    camera.position.copy(position);
-    camera.lookAt(target);
+    camera.position.copy(base.position);
+    camera.lookAt(base.target);
     tmp.right.setFromMatrixColumn(camera.matrixWorld, 0);
     tmp.up.setFromMatrixColumn(camera.matrixWorld, 1);
     camera.position
       .addScaledVector(tmp.right, parallax.current.x * CAMERA.parallax)
-      .addScaledVector(tmp.up, parallax.current.y * CAMERA.parallax * 0.6);
-    camera.lookAt(target);
+      .addScaledVector(tmp.up, parallax.current.y * CAMERA.parallax * 0.5);
+    camera.lookAt(base.target);
 
     shake.update(d);
     camera.position.addScaledVector(tmp.right, shake.offset.x).addScaledVector(tmp.up, shake.offset.y);

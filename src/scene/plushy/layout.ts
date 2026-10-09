@@ -93,6 +93,7 @@ export type PlushyLayout = ReturnType<typeof buildLayout>;
 
 /** Spawn orientation: face the camera. */
 export function spawnQuaternion() {
-  const yaw = Math.atan2(CAMERA.position[0], CAMERA.position[2]) - 0.15;
+  // face the viewer, turned a touch to its right for a friendlier 3/4 pose
+  const yaw = Math.atan2(CAMERA.position[0] - PLUSHY.spawn[0], CAMERA.position[2] - PLUSHY.spawn[2]) - 0.3;
   return new Quaternion().setFromAxisAngle(UP, yaw);
 }

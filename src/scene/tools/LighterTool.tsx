@@ -5,7 +5,7 @@ import { Group, MeshStandardMaterial, PerspectiveCamera, PointLight, Vector3 } f
 import { runtime } from '../../state/runtime';
 import { useStore } from '../../state/store';
 import { sound } from '../../audio/SoundManager';
-import { rayPlaneY, type PointerInfo, type RegisterTool } from './Tools';
+import { clampToPlay, rayRoom, type PointerInfo, type RegisterTool } from './Tools';
 
 const S = 1.7; // the lighter is drawn a bit oversized so it reads at room scale
 const BODY_H = 0.17;
@@ -13,6 +13,7 @@ const TIP_Y = (BODY_H / 2 + 0.06) * S; // flame tip above the lighter's centre
 
 const _v = new Vector3();
 const _toCam = new Vector3();
+const _n = new Vector3();
 
 /** Press-and-hold lighter: heats, chars and eventually ignites the plushy. */
 export function LighterTool({ register }: { register: RegisterTool }) {
@@ -36,13 +37,11 @@ export function LighterTool({ register }: { register: RegisterTool }) {
       _toCam.copy(p.ray.direction).negate();
       if (hit) {
         want.current.copy(hit.point).addScaledVector(_toCam, 0.13).add(_v.set(0, 0.03, 0));
-      } else {
-        const floor = rayPlaneY(p.ray, 0, _v);
-        if (floor) want.current.copy(floor).addScaledVector(_toCam, 0.25).add(_v.set(0, 0.12, 0));
+      } else if (rayRoom(p.ray, _v, _n) !== null) {
+        // hover just off whatever surface is under the pointer
+        want.current.copy(_v).addScaledVector(_n, 0.18).addScaledVector(_toCam, 0.2);
       }
-      want.current.y = Math.max(TIP_Y + 0.02, want.current.y);
-      want.current.x = Math.max(-3.8, Math.min(3.8, want.current.x));
-      want.current.z = Math.max(-3.8, Math.min(3.8, want.current.z));
+      clampToPlay(want.current, TIP_Y + 0.02, -0.3);
     };
     const extinguish = () => {
       const s = state.current;

@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useBeforePhysicsStep } from '@react-three/rapier';
-import { Quaternion, Vector3 } from 'three';
-import { HAND } from '../../config';
+import { Plane, Quaternion, Ray, Vector2, Vector3 } from 'three';
+import { HAND, PHYSICS } from '../../config';
 import { runtime, type PlushyPart } from '../../state/runtime';
 import { sound } from '../../audio/SoundManager';
-import { rayPlaneY, type PointerInfo, type RegisterTool } from './Tools';
+import { clampToPlay, forwardFlat, rayFromNdc, rayRoom, type PointerInfo, type RegisterTool } from './Tools';
 
 interface Grab {
   part: PlushyPart;
@@ -16,9 +16,12 @@ interface Grab {
   engaged: boolean;
   target: Vector3;
   targetVel: Vector3;
-  history: { t: number; p: Vector3 }[];
+  history: { t: number; p: Vector3; ndc: Vector2 }[];
   rayDir: Vector3;
-  planeY: number;
+  /** Vertical plane facing the viewer, through the grab point: drags move left/right/up/down. */
+  plane: Plane;
+  /** Lowest height the grab point may be pulled to (keeps it lifted off the floor). */
+  minY: number;
 }
 
 const _q = new Quaternion();
@@ -26,6 +29,10 @@ const _v = new Vector3();
 const _a = new Vector3();
 const _f = new Vector3();
 const _throw = new Vector3();
+const _ray = new Ray();
+const _plane = new Plane();
+const _ndc = new Vector2();
+const _aim = new Vector3();
 
 /** Grab, drag, pull, flick-throw and punch. */
 export function HandTool({ register }: { register: RegisterTool }) {
@@ -55,11 +62,51 @@ export function HandTool({ register }: { register: RegisterTool }) {
       const a = recent[0];
       const b = recent[recent.length - 1];
       const dt = Math.max(0.016, b.t - a.t);
+      // flick velocity in the viewer-facing drag plane
       _throw.subVectors(b.p, a.p).divideScalar(dt).multiplyScalar(HAND.throwScale);
-      const flat = Math.hypot(_throw.x, _throw.z);
-      if (flat < 1.5) return; // a gentle release just drops it
-      _throw.y += flat * HAND.throwUpBias;
-      if (_throw.length() > HAND.maxThrowSpeed) _throw.setLength(HAND.maxThrowSpeed);
+      const speed = Math.min(HAND.maxThrowSpeed, _throw.length());
+      if (speed < 1.5) return; // a gentle release just drops it
+      // 1) Screen direction: where the flick's start and end land on a
+      //    floor-parallel plane through the grab point (perspective-correct,
+      //    so flicking up the screen sends it into the room).
+      // 2) Aim: the room surface just past the release point. A shelf looks
+      //    "up" on screen partly because it is tall, so when the surface the
+      //    flick points at agrees with the screen direction, throw at it.
+      const cam = runtime.camera;
+      const upFlick = Math.max(0, _throw.y);
+      let aimed = false;
+      if (cam) {
+        _plane.set(_v.set(0, 1, 0), -a.p.y);
+        const pa = _a;
+        const ok =
+          rayFromNdc(cam, a.ndc, _ray).intersectPlane(_plane, pa) !== null &&
+          rayFromNdc(cam, b.ndc, _ray).intersectPlane(_plane, _f) !== null;
+        const dir = _f.sub(pa).setY(0);
+        if (ok && dir.lengthSq() > 1e-4) {
+          dir.normalize();
+          const flat = speed * (1 - HAND.throwKeepUp * Math.min(1, upFlick / speed));
+          _throw.copy(dir).multiplyScalar(flat);
+          _throw.y = upFlick * HAND.throwKeepUp + speed * HAND.throwLift;
+          aimed = true;
+
+          const reach = _ndc.subVectors(b.ndc, a.ndc);
+          if (reach.lengthSq() > 1e-8) {
+            reach.normalize().multiplyScalar(HAND.throwAimReach).add(b.ndc).clampScalar(-1, 1);
+            if (rayRoom(rayFromNdc(cam, reach, _ray), _aim) !== null) {
+              const from = g.part.body.translation();
+              const to = _aim.sub(_v.set(from.x, from.y, from.z));
+              const flatTo = Math.hypot(to.x, to.z);
+              const cos = flatTo > 1e-3 ? (to.x * dir.x + to.z * dir.z) / flatTo : -1;
+              if (flatTo > 0.8 && cos > Math.cos((HAND.throwAimMaxAngle * Math.PI) / 180)) {
+                const dist = to.length();
+                _throw.copy(to).divideScalar(dist).multiplyScalar(speed);
+                _throw.y += Math.min(speed * 0.6, 0.5 * Math.abs(PHYSICS.gravity) * (dist / speed) * HAND.throwArc);
+              }
+            }
+          }
+        }
+      }
+      if (!aimed) _throw.setLength(speed);
       for (const body of plushy.bodies) {
         const v = body.linvel();
         body.setLinvel({ x: v.x + (_throw.x - v.x) * 0.75, y: v.y + (_throw.y - v.y) * 0.75, z: v.z + (_throw.z - v.z) * 0.75 }, true);
@@ -85,14 +132,13 @@ export function HandTool({ register }: { register: RegisterTool }) {
     };
 
     const updateTarget = (g: Grab, p: PointerInfo) => {
-      const hit = rayPlaneY(p.ray, g.planeY, _a);
+      const hit = p.ray.intersectPlane(g.plane, _a);
       if (!hit) return;
-      hit.x = Math.max(-HAND.bounds, Math.min(HAND.bounds, hit.x));
-      hit.z = Math.max(-HAND.bounds, Math.min(HAND.bounds, hit.z));
+      clampToPlay(hit, g.minY);
       const last = g.history[g.history.length - 1];
       if (last && p.time > last.t) g.targetVel.subVectors(hit, last.p).divideScalar(p.time - last.t).clampLength(0, 25);
       g.target.copy(hit);
-      g.history.push({ t: p.time, p: hit.clone() });
+      g.history.push({ t: p.time, p: hit.clone(), ndc: p.ndc.clone() });
       if (g.history.length > 12) g.history.shift();
     };
 
@@ -121,8 +167,9 @@ export function HandTool({ register }: { register: RegisterTool }) {
           targetVel: new Vector3(),
           history: [],
           rayDir: p.ray.direction.clone(),
-          // carry the body centre at a fixed height, so the grabbed point's plane sits above it
-          planeY: (hit.part.kind === 'head' ? HAND.liftHead : HAND.liftSegment) + (hit.part.kind === 'head' ? hit.point.y - t.y : 0),
+          plane: new Plane().setFromNormalAndCoplanarPoint(forwardFlat(new Vector3()), hit.point),
+          // keep a held head clear of the floor, measured at the grab point
+          minY: hit.part.kind === 'head' ? HAND.minHeadHeight + (hit.point.y - t.y) : HAND.minSegmentHeight,
         };
         updateTarget(grab.current, p);
         plushy.noteInteraction();

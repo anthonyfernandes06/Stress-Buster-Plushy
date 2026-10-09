@@ -2,7 +2,7 @@
 
 **Play it: https://anthonyfernandes06.github.io/Stress-Buster-Plushy/**
 
-![The plushy octopus being thrown into the bookshelf](screenshots/throw-into-shelf.png)
+![The cozy room with the plushy octopus on the rug](screenshots/room.png)
 
 A small 3D stress-relief toy: a velvety yellow plush octopus in a cozy room that you can grab, fling, punch, bat across the room and set on fire. Cartoon violence only: it squashes, puffs fluff, gets dizzy, goes sooty, and always recovers.
 
@@ -32,16 +32,21 @@ npm run preview    # serves dist/ locally
 
 The production bundle is about 1.3 MB gzipped. That includes Rapier's embedded WASM, which is most of it.
 
+## The view
+
+The room is a closed box (back, left and right walls, plus a ceiling) seen through its open front, like a stage set. The camera sits just outside that opening, looking slightly down. It keeps a roughly constant horizontal field of view, so on any window shape the walls, floor and ceiling run past the edges of the screen and the whole page is the room. On resize, `CameraRig.tsx` works out which part of the floor is actually visible above the control bar and places invisible "screen" walls along that edge. The octopus can be thrown at the screen and bounces off it, but it can never leave the frame. If it somehow ends up outside the room, it drops back onto the rug.
+
 ## Controls
 
 | Input | Action |
 |---|---|
 | Drag the octopus (Hand) | Lift, move, stretch tentacles |
-| Flick and release (Hand) | Throw |
+| Flick and release (Hand) | Throw toward what you flick at (up the screen goes into the room) |
 | Quick tap on the octopus (Hand) | Punch |
-| Swipe or drag (Bat) | Swing in that direction (a tap does a default swing) |
+| Swipe or drag (Bat) | Swing in that direction: sideways goes across the room, upward goes into it (a tap does a default swing) |
 | Press and hold (Lighter) | Ignite the flame; hold it near the octopus to burn it |
-| `1` `2` `3` | Hand, Bat, Lighter |
+| Click (Blaster) | Fire a foam dart at the crosshair; hold for rapid fire. Darts stick, then pop off |
+| `1` `2` `3` `4` | Hand, Bat, Lighter, Blaster |
 | `R` | Reset the room |
 | `M` | Mute or unmute |
 | `Esc` | Release the held octopus |
@@ -56,9 +61,10 @@ src/
   state/runtime.ts        per-frame mutable state shared by systems (plushy handle, fx emitters, shake, hit-stop)
   scene/
     Scene.tsx             lights, environment, physics world, contact shadows, postprocessing
-    CameraRig.tsx         fits the room to any viewport, pointer parallax, camera shake
-    Room.tsx              floor, walls (left wall has a real window opening), invisible colliders
-    props/                MediaConsole, Tv (live meter screen), Bookshelf (+ books), Pouf, Rug, Lamp, Plant, Window
+    CameraRig.tsx         aspect-aware framing, the visible-floor boundary, pointer parallax, camera shake
+    Room.tsx              floor, three walls (left wall has a real window opening), ceiling, colliders
+    props/                MediaConsole, Tv (live meter screen), Bookshelf (+ books), Pouf, Rug, Lamp, Plant,
+                          Window, WallArt, FairyLights
     plushy/
       Plushy.tsx          ragdoll (head + 8 tentacles x 8 segments), joints, reactions, fire, idle charm
       Tentacle.tsx        tapered two-tone tube rebuilt in place every frame
@@ -66,7 +72,7 @@ src/
       Eyes.tsx            expressions: blink, > <, X X, dizzy spirals, panic, wide
       headShape.ts        head surface function (mesh, eyes and heat lookups all use it)
       layout.ts           rest pose of the octopus
-    tools/                Tools (pointer routing), HandTool, BatTool, LighterTool
+    tools/                Tools (pointer routing), HandTool, BatTool, LighterTool, GunTool (foam-dart blaster)
     fx/                   pooled particles (fluff, fire, smoke, sparks), impact rings, camera shake
   audio/SoundManager.ts   procedural Web Audio sounds behind play('thud', { intensity, pitch })
   ui/                     Wordmark, ToolDock, BottomBar, IntroCard, HintToast, Loader, ui.css
@@ -76,15 +82,18 @@ src/
 
 | Section | What it controls |
 |---|---|
+| `ROOM`, `PLAY` | room size (width, depth, ceiling height) and the usable floor margins |
+| `CAMERA` | eye position and target, horizontal field of view, how much screen to keep clear for the controls |
 | `PHYSICS` | gravity, fixed timestep, solver iterations |
 | `PLUSHY` | head size and mass, tentacle radii, segment mass, rest pose (`restPitch`, `restCurl`), char recovery time, held gravity scale |
 | `PLUSHY.joints` | swing limits (radians) and motor stiffness for root, middle and tip joints, plus joint damping. Higher stiffness gives a firmer plush; lower gives a limper one. |
 | `PLUSHY.material` | friction, restitution, linear and angular damping |
 | `IMPACT` | light/heavy thresholds (m/s), per-body debounce, hit-stop length |
-| `HAND` | grab spring stiffness and damping, carry heights, throw window, speed clamp, punch impulse |
+| `HAND` | grab spring stiffness and damping, minimum carry heights, throw window, aiming, speed clamp, punch impulse |
 | `POUF_BOUNCE` | the extra launch when the octopus lands on the pouf |
 | `BAT` | bat size, sweep angle, swing speed range, launch scale, aim assist, cooldown |
 | `FIRE` | heat radius and rate, time to ignite, spread delay, burn duration, flailing |
+| `GUN` | where the blaster is held, fire rate, dart speed, knockback, how long darts stick, dizzy combo |
 | `METER` | how fast each kind of hit fills the TV meter |
 | `PARTICLES` | pool sizes per particle system |
 
@@ -112,14 +121,14 @@ The octopus is the exception. Its tentacles are driven by the physics chain. A s
 - **The lighter only targets the octopus and the floor.** Furniture tops are not raycast.
 - **Fire never spreads to props.** This is by design.
 - **The optional ±15° drag-orbit is not implemented.** The camera is fixed apart from pointer parallax and shake.
-- **The room is small on portrait phones.** It is fit to the screen width.
+- **Built for desktop browsers.** Phones still work, but portrait screens get a tight crop around the middle of the room.
 - **Tentacle tubes are rebuilt on the CPU every frame.** About 5k vertices in total, using reused buffers.
 
 ## Suggested next steps
 
 - Record real foley (plush squeaks, wood thwack, a crackle loop) and drop it into `SAMPLE_FILES`.
 - Add a GLB plushy with skinned tentacles for a softer, sculpted look.
-- Add a closer portrait camera on phones, or a short pinch-free zoom.
+- Add a dedicated portrait camera for phones.
 - Move the tentacle tube deformation to the GPU (bone texture or vertex shader).
 - Add a gentle drag-orbit (±15°) with a reset-view button.
 - Have the TV react to more events (a "nice throw!" for long flights, a fire emoji while burning).

@@ -291,3 +291,44 @@ export function flameSprite() {
     return t;
   });
 }
+
+/** Very soft, blotchy plaster tone so large wall areas don't read as flat CG. */
+export function plasterTexture() {
+  return memo('plaster', () => {
+    const size = 512;
+    const [c, g] = canvas(size);
+    const r = rng(23);
+    g.fillStyle = '#F4F0EA';
+    g.fillRect(0, 0, size, size);
+    // large soft patches
+    for (let i = 0; i < 90; i++) {
+      const x = r() * size;
+      const y = r() * size;
+      const rad = 30 + r() * 90;
+      const light = r() > 0.5;
+      const grad = g.createRadialGradient(x, y, 0, x, y, rad);
+      grad.addColorStop(0, light ? 'rgba(255,255,255,0.12)' : 'rgba(214,200,182,0.07)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad;
+      // draw wrapped so the texture tiles seamlessly
+      for (const dx of [-size, 0, size])
+        for (const dy of [-size, 0, size]) {
+          g.beginPath();
+          g.arc(x + dx, y + dy, rad, 0, Math.PI * 2);
+          g.fill();
+        }
+    }
+    // fine grain
+    g.globalAlpha = 0.05;
+    for (let i = 0; i < 26000; i++) {
+      g.fillStyle = r() > 0.5 ? '#8C7A66' : '#FFFFFF';
+      g.fillRect(r() * size, r() * size, 1, 1);
+    }
+    g.globalAlpha = 1;
+    const t = new CanvasTexture(c);
+    t.colorSpace = SRGBColorSpace;
+    t.wrapS = t.wrapT = RepeatWrapping;
+    t.anisotropy = 4;
+    return t;
+  });
+}

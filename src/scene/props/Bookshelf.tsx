@@ -16,12 +16,12 @@ import { sound } from '../../audio/SoundManager';
 import { Spring } from '../spring';
 import { impactSpeed, track, untrack } from '../physicsUtils';
 
-const H = ROOM.half;
+const H = ROOM.halfWidth;
 export const SHELF = {
   depth: 0.42,
   width: 1.5,
   height: 2.42,
-  zc: -2.05,
+  zc: -2.5,
   board: 0.04,
   side: 0.045,
   levels: [0.1, 0.6, 1.1, 1.6, 2.1],

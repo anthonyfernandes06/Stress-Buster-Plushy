@@ -21,7 +21,7 @@ import { BAT } from '../../config';
 import { runtime } from '../../state/runtime';
 import { useStore } from '../../state/store';
 import { sound } from '../../audio/SoundManager';
-import { rayPlaneY, type PointerInfo, type RegisterTool } from './Tools';
+import { clampToPlay, forwardFlat, rayRoom, type PointerInfo, type RegisterTool } from './Tools';
 import { FX_LAYER } from '../layers';
 
 const UP = new Vector3(0, 1, 0);
@@ -50,6 +50,7 @@ const _b = new Vector3();
 const _p = new Vector3();
 const _q = new Quaternion();
 const _hitDir = new Vector3();
+const _hover = new Vector3();
 
 function batDir(theta: number, out: Vector3) {
   return out.set(Math.sin(theta) * Math.cos(PITCH), Math.sin(PITCH), Math.cos(theta) * Math.cos(PITCH));
@@ -69,7 +70,7 @@ export function BatTool({ register }: { register: RegisterTool }) {
   const group = useRef<Group>(null);
   const body = useRef<RapierRigidBody>(null);
   const cursor = useRef(new Vector3(1.5, BAT.hoverY, 1.5));
-  const press = useRef<{ x: number; y: number; t: number; world: Vector3; height: number } | null>(null);
+  const press = useRef<{ x: number; y: number; t: number; world: Vector3 } | null>(null);
   const lastSwing = useRef(0);
   const swing = useRef<Swing>({
     active: false,
@@ -181,42 +182,63 @@ export function BatTool({ register }: { register: RegisterTool }) {
       return fallback.clone();
     };
 
-    const swingHeight = (p: PointerInfo) => {
+    /** Where a press lands: the octopus if it's under the pointer, else just in front of the wall/floor. */
+    const pressPoint = (p: PointerInfo) => {
       const hit = runtime.plushy?.raycast(p.ray);
-      return hit ? Math.max(0.25, Math.min(1.5, hit.point.y)) : 0.7;
+      if (hit) return hit.point.clone();
+      const out = new Vector3();
+      const dist = rayRoom(p.ray, out);
+      if (dist === null) return cursor.current.clone();
+      p.ray.at(Math.max(0.5, dist - 0.6), out);
+      return clampToPlay(out, 0.45).setY(Math.max(0.45, Math.min(1.3, out.y)));
+    };
+
+    /** Where the idle bat hovers: a little in front of whatever is under the pointer. */
+    const hoverPoint = (p: PointerInfo, out: Vector3) => {
+      const hit = runtime.plushy?.raycast(p.ray);
+      const dist = hit ? hit.distance : rayRoom(p.ray, out);
+      if (dist === null) return null;
+      p.ray.at(Math.max(0.5, dist - 0.9), out);
+      return clampToPlay(out, 0.55);
+    };
+
+    /** Screen swipe -> floor direction: sideways is across the room, upward is into it. */
+    const swipeDir = (dxPx: number, dyPx: number) => {
+      const right = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize();
+      return right.multiplyScalar(dxPx).addScaledVector(forwardFlat(_b), -dyPx * 1.2).normalize();
+    };
+
+    /** World units per screen pixel at a given point (for swipe speed). */
+    const worldPerPx = (at: Vector3) => {
+      const d = camera.position.distanceTo(at);
+      return (2 * d * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, window.innerHeight);
     };
 
     register('bat', {
       down(p) {
-        const h = swingHeight(p);
-        const w = rayPlaneY(p.ray, h, new Vector3()) ?? cursor.current.clone();
-        press.current = { x: p.x, y: p.y, t: p.time, world: w, height: h };
+        press.current = { x: p.x, y: p.y, t: p.time, world: pressPoint(p) };
       },
       move(p) {
-        const hit = rayPlaneY(p.ray, BAT.hoverY, _b);
-        if (hit) cursor.current.copy(hit);
+        if (hoverPoint(p, _hover)) cursor.current.copy(_hover);
         const pr = press.current;
         if (!pr || swing.current.active) return;
         const moved = Math.hypot(p.x - pr.x, p.y - pr.y);
         if (moved > BAT.swipeTriggerPx) {
-          const cur = rayPlaneY(p.ray, pr.height, new Vector3());
-          if (!cur) return;
-          const drag = cur.clone().sub(pr.world);
+          const dir = swipeDir(p.x - pr.x, p.y - pr.y);
           const dt = Math.max(0.03, p.time - pr.t);
-          const speed = drag.length() / dt;
+          const speed = (moved / dt) * worldPerPx(pr.world);
           const omega = Math.max(BAT.minAngVel, Math.min(BAT.maxAngVel, (speed * BAT.speedToAngVel) / BAT.sweetSpot));
-          startSwing(drag, omega, aimCenter(pr.world, drag, cur));
+          startSwing(dir, omega, aimCenter(pr.world, dir, pr.world));
           press.current = null;
         }
       },
-      up(p) {
+      up() {
         const pr = press.current;
         press.current = null;
         if (!pr || swing.current.active) return;
         // a tap: default left-to-right horizontal swing through the pointer
         const right = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize();
         startSwing(right, BAT.tapAngVel, aimCenter(pr.world, right, pr.world));
-        void p;
       },
       cancel() {
         press.current = null;

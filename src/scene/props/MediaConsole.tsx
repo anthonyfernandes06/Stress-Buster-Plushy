@@ -12,7 +12,7 @@ export const CONSOLE = { w: 2.6, h: 0.52, d: 0.6, legH: 0.1 };
 /** Low oak media console with two slatted doors. Fixed collider. */
 export function MediaConsole() {
   const { w, h, d, legH } = CONSOLE;
-  const z = -ROOM.half + d / 2 + 0.02;
+  const z = ROOM.back + d / 2 + 0.02;
   const bodyY = legH + h / 2;
   const group = useRef<Group>(null);
   const jolt = useMemo(() => new Spring(900, 22), []);

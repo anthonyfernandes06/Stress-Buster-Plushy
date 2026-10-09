@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { BallCollider, CylinderCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
 import { Group, LatheGeometry, MeshStandardMaterial, Vector2 } from 'three';
+import { ROOM } from '../../config';
 import { runtime } from '../../state/runtime';
 import { useStore } from '../../state/store';
 import { Spring } from '../spring';
 import { track, untrack } from '../physicsUtils';
 
-export const PLANT = { x: 3.3, z: -3.25 };
+export const PLANT = { x: ROOM.halfWidth - 0.7, z: ROOM.back + 0.66 };
 
 const LEAVES = Array.from({ length: 9 }, (_, i) => {
   const a = (i / 9) * Math.PI * 2 + (i % 2) * 0.3;

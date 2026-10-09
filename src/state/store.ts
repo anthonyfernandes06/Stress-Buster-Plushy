@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { METER } from '../config';
+import type { ViewSegment } from './runtime';
 
-export type Tool = 'hand' | 'bat' | 'lighter';
+export type Tool = 'hand' | 'bat' | 'lighter' | 'gun';
 export type PlushyState = 'idle' | 'held' | 'hit' | 'dizzy' | 'burning';
-export type HitKind = 'impact' | 'punch' | 'bat' | 'burn';
+export type HitKind = 'impact' | 'punch' | 'bat' | 'burn' | 'shot';
 
 interface StressStore {
   started: boolean;
@@ -16,6 +17,9 @@ interface StressStore {
   plushyState: PlushyState;
   hintsShown: Record<string, boolean>;
   resetToken: number;
+  /** Invisible walls along the bottom and lower corners of the screen. */
+  viewBounds: ViewSegment[];
+  setViewBounds(b: ViewSegment[]): void;
   start(): void;
   setReady(): void;
   setTool(t: Tool): void;
@@ -31,6 +35,7 @@ const meterGain: Record<HitKind, number> = {
   punch: METER.punch,
   bat: METER.bat,
   burn: METER.burn,
+  shot: METER.shot,
 };
 
 export const useStore = create<StressStore>((set, get) => ({
@@ -44,6 +49,8 @@ export const useStore = create<StressStore>((set, get) => ({
   plushyState: 'idle',
   hintsShown: {},
   resetToken: 0,
+  viewBounds: [],
+  setViewBounds: (viewBounds) => set({ viewBounds }),
   start: () => set({ started: true }),
   setReady: () => set({ ready: true }),
   setTool: (tool) => {

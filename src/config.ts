@@ -3,27 +3,43 @@
  * tool strengths and fire timings all live here.
  */
 
+/**
+ * The room is a closed box seen through its open front, like a stage set.
+ * x runs left-right, z runs from the back wall (negative) toward the viewer.
+ */
 export const ROOM = {
-  half: 4, // floor is 8 x 8, centred on the origin
-  wallHeight: 3.2,
-  wallThickness: 0.18,
-  floorThickness: 0.24,
-  ceiling: 5,
+  halfWidth: 4.6, // side walls at x = -4.6 / +4.6
+  back: -4.2, // inner face of the back wall
+  /** How far floor, walls and ceiling extend toward the viewer (just out of frame). */
+  front: 5.0,
+  height: 3.8, // ceiling
+  wallThickness: 0.2,
   restitution: { floor: 0.3, wall: 0.4 },
   friction: { floor: 0.8, wall: 0.5 },
 } as const;
 
+/** Usable floor, kept a little away from the walls. */
+export const PLAY = {
+  minX: -ROOM.halfWidth + 0.5,
+  maxX: ROOM.halfWidth - 0.5,
+  minZ: ROOM.back + 0.5,
+  maxY: ROOM.height - 0.45,
+};
+
 export const CAMERA = {
-  position: [6, 6.5, 8] as [number, number, number],
-  target: [0, 0.6, 0] as [number, number, number],
-  fov: 35,
-  fovPortrait: 46,
-  parallax: 0.3,
+  /** Eye just outside the open front of the room, looking in and slightly down. */
+  position: [0.55, 3.25, 5.6] as [number, number, number],
+  target: [-0.15, 0.72, -1.3] as [number, number, number],
+  /** Horizontal field of view held roughly constant across window shapes. */
+  hFov: 70,
+  minVFov: 34,
+  maxVFov: 64,
+  parallax: 0.28,
   parallaxEase: 2.5,
-  orbitLimitDeg: 15,
-  /** Fraction of the viewport the room may fill (leaves room for UI). */
-  fitMargin: 0.86,
-  fitMarginPortrait: 0.94,
+  /** Screen band at the bottom (px) kept clear of the play area for the controls. */
+  bottomInsetPx: 104,
+  /** How far inside the visible edge the invisible "screen" walls sit (world units). */
+  boundsInset: 0.35,
 };
 
 export const PHYSICS = {
@@ -33,7 +49,7 @@ export const PHYSICS = {
 };
 
 export const PLUSHY = {
-  spawn: [0, 1.85, 0.25] as [number, number, number],
+  spawn: [-0.1, 1.85, -0.85] as [number, number, number],
   resetDropHeight: 1.0,
   head: {
     radius: 0.55,
@@ -97,9 +113,9 @@ export const IMPACT = {
 };
 
 export const HAND = {
-  /** Height the grabbed body's centre is carried at (head / tentacle grabs). */
-  liftHead: 1.75,
-  liftSegment: 1.3,
+  /** While held, the head centre is kept at least this high (so it lifts off the floor). */
+  minHeadHeight: 1.1,
+  minSegmentHeight: 0.45,
   springK: 170,
   springDamping: 20,
   maxForce: 340,
@@ -108,13 +124,21 @@ export const HAND = {
   effectiveMassSegment: 1.4,
   throwWindow: 0.08,
   throwScale: 1.05,
-  throwUpBias: 0.22,
+  /** Share of an upward flick's speed kept as height (the rest sends it into the room). */
+  throwKeepUp: 0.45,
+  /** Extra upward arc, as a fraction of throw speed. */
+  throwLift: 0.2,
+  /** How far past the release point (NDC units) to look for the surface being aimed at. */
+  throwAimReach: 0.08,
+  /** Aim at that surface only if it is within this angle (deg) of the flick direction. */
+  throwAimMaxAngle: 50,
+  /** Gravity compensation when aiming, so throws arc onto their target. */
+  throwArc: 0.85,
   maxThrowSpeed: 17,
   punchMaxTime: 0.18,
   punchMaxPx: 6,
   punchImpulse: 3.2,
   punchUp: 0.45,
-  bounds: 3.55,
 };
 
 /** Extra launch when the plushy lands on the pouf (m/s). */
@@ -140,6 +164,37 @@ export const BAT = {
   cooldown: 0.25,
 };
 
+/** Toy foam-dart blaster. */
+export const GUN = {
+  /** Where the blaster is held, in camera space (right, up, forward). */
+  hold: [0.46, -0.3, 1.25] as [number, number, number],
+  /** Extra turn (rad) after aiming so you see the blaster's side, plus a slight roll. */
+  yawBias: 0.38,
+  cant: -0.12,
+  /** Size of the held blaster. */
+  scale: 0.85,
+  /** Darts are drawn oversized so they read at room distance. */
+  dartScale: 1.8,
+  /** Seconds between shots while the button is held. */
+  interval: 0.11,
+  dartSpeed: 30,
+  /** Push on the octopus per dart (N·s): head / tentacle. */
+  impulseHead: 1.7,
+  impulseSegment: 0.45,
+  /** Upward pop per hit, relative to the push. */
+  impulseLift: 0.45,
+  /** Push on loose props (books, lamp, plant). */
+  impulseProp: 0.5,
+  /** How long darts stay stuck before popping off (seconds). */
+  stickTime: 4,
+  maxDarts: 40,
+  /** Rapid hits within this window build a combo; enough of them make it dizzy. */
+  comboWindow: 0.7,
+  comboDizzy: 10,
+  recoil: 0.07,
+  recoilPitch: 0.16,
+};
+
 export const FIRE = {
   heatRadius: 0.25,
   heatRate: 1.6, // heat per second while flame is close
@@ -160,6 +215,7 @@ export const METER = {
   punch: 0.011,
   bat: 0.045,
   burn: 0.05,
+  shot: 0.006,
   /** Minimum seconds between counted impact hits (one landing = one hit). */
   impactHitGap: 0.45,
   celebrateSeconds: 3.2,

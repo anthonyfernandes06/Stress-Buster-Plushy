@@ -20,7 +20,9 @@ export type SoundName =
   | 'ignite'
   | 'puff'
   | 'tick'
-  | 'toggle';
+  | 'toggle'
+  | 'pew'
+  | 'pok';
 
 export interface PlayOptions {
   /** 0..1 loudness / force of the event. */
@@ -48,6 +50,8 @@ const MAX_VOICES: Record<SoundName, number> = {
   puff: 2,
   tick: 2,
   toggle: 2,
+  pew: 4,
+  pok: 4,
 };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -412,6 +416,38 @@ class SoundManager {
         env(g.gain, t, 0.001, 0.035, 0.12);
         o.connect(g).connect(out);
         return 0.05;
+      }
+      case 'pew': {
+        // spring-loaded toy blaster: an airy "thwump" with a quick pitch drop
+        const d = 0.16;
+        const n = this.noiseSrc(t, 0.1);
+        const bp = this.filter('bandpass', 1100 * p, 0.9);
+        bp.frequency.setValueAtTime(1600 * p, t);
+        bp.frequency.exponentialRampToValueAtTime(500 * p, t + 0.09);
+        const ng = this.gain(0);
+        env(ng.gain, t, 0.002, 0.08, 0.28 + I * 0.15);
+        n.connect(bp).connect(ng).connect(out);
+        const o = this.osc('sine', 540 * p, t, d);
+        o.frequency.exponentialRampToValueAtTime(130 * p, t + 0.12);
+        const og = this.gain(0);
+        env(og.gain, t, 0.002, 0.12, 0.2 + I * 0.1);
+        o.connect(og).connect(out);
+        return d;
+      }
+      case 'pok': {
+        // foam dart landing: a soft suction "pok"
+        const d = 0.1;
+        const o = this.osc('sine', 340 * p, t, d);
+        o.frequency.exponentialRampToValueAtTime(120 * p, t + 0.07);
+        const og = this.gain(0);
+        env(og.gain, t, 0.002, 0.07, 0.25 + I * 0.2);
+        o.connect(og).connect(out);
+        const n = this.noiseSrc(t, 0.03);
+        const bp = this.filter('bandpass', 2200 * p, 2);
+        const ng = this.gain(0);
+        env(ng.gain, t, 0.001, 0.02, 0.12 + I * 0.08);
+        n.connect(bp).connect(ng).connect(out);
+        return d;
       }
       case 'toggle': {
         [0, 0.045].forEach((dt, i) => {

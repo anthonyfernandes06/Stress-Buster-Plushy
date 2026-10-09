@@ -6,7 +6,7 @@ import { runtime } from '../../state/runtime';
 import { Spring } from '../spring';
 import { fabricNormal } from '../textures';
 
-export const POUF = { x: 2.35, z: 2.05, r: 0.7, h: 0.84 };
+export const POUF = { x: 2.55, z: -0.35, r: 0.7, h: 0.84 };
 
 /** Big soft sage pouf. Fixed, very bouncy, squashes when hit. */
 export function Pouf() {

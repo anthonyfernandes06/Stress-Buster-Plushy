@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useStore, type Tool } from '../state/store';
-import { BatIcon, FlameIcon, HandIcon } from './icons';
+import { BatIcon, BlasterIcon, FlameIcon, HandIcon } from './icons';
 
 const TOOLS: { id: Tool; label: string; key: string; icon: ReactNode }[] = [
   { id: 'hand', label: 'Hand', key: '1', icon: <HandIcon /> },
   { id: 'bat', label: 'Bat', key: '2', icon: <BatIcon /> },
   { id: 'lighter', label: 'Lighter', key: '3', icon: <FlameIcon /> },
+  { id: 'gun', label: 'Blaster', key: '4', icon: <BlasterIcon /> },
 ];
 
 export function ToolDock() {

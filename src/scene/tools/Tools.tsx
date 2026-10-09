@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import { PerspectiveCamera, Ray, Vector2, Vector3 } from 'three';
+import { PLAY, ROOM } from '../../config';
 import { runtime } from '../../state/runtime';
 import { useStore, type Tool } from '../../state/store';
 import { HandTool } from './HandTool';
 import { BatTool } from './BatTool';
 import { LighterTool } from './LighterTool';
+import { GunTool } from './GunTool';
 
 export interface PointerInfo {
   id: number;
@@ -35,13 +37,49 @@ export function rayFromNdc(camera: PerspectiveCamera, ndc: Vector2, out: Ray) {
   return out;
 }
 
-/** Intersect a ray with the horizontal plane y = h. */
-export function rayPlaneY(ray: Ray, h: number, out: Vector3): Vector3 | null {
-  const dy = ray.direction.y;
-  if (Math.abs(dy) < 1e-5) return null;
-  const t = (h - ray.origin.y) / dy;
-  if (t < 0) return null;
-  return ray.at(t, out);
+/**
+ * Nearest hit of a ray against the inside of the room box (floor, ceiling,
+ * back and side walls). Returns the distance, or null if it hits nothing.
+ */
+export function rayRoom(ray: Ray, out: Vector3, normal?: Vector3): number | null {
+  const o = ray.origin;
+  const d = ray.direction;
+  const W = ROOM.halfWidth;
+  const e = 1e-3;
+  let best = Infinity;
+  const test = (t: number, nx: number, ny: number, nz: number) => {
+    if (!(t > 0) || t >= best) return;
+    const x = o.x + d.x * t;
+    const y = o.y + d.y * t;
+    const z = o.z + d.z * t;
+    if (x < -W - e || x > W + e || y < -e || y > ROOM.height + e || z < ROOM.back - e || z > ROOM.front) return;
+    best = t;
+    normal?.set(nx, ny, nz);
+  };
+  if (d.y < 0) test(-o.y / d.y, 0, 1, 0);
+  if (d.y > 0) test((ROOM.height - o.y) / d.y, 0, -1, 0);
+  if (d.z < 0) test((ROOM.back - o.z) / d.z, 0, 0, 1);
+  if (d.x < 0) test((-W - o.x) / d.x, 1, 0, 0);
+  if (d.x > 0) test((W - o.x) / d.x, -1, 0, 0);
+  if (!Number.isFinite(best)) return null;
+  ray.at(best, out);
+  return best;
+}
+
+/** Camera forward, flattened to the floor plane. */
+export function forwardFlat(out: Vector3) {
+  const cam = runtime.camera;
+  if (!cam) return out.set(0, 0, -1);
+  cam.getWorldDirection(out).setY(0);
+  return out.lengthSq() > 1e-6 ? out.normalize() : out.set(0, 0, -1);
+}
+
+/** Keeps a point inside the playable part of the room. */
+export function clampToPlay(p: Vector3, minY = 0, margin = 0) {
+  p.x = Math.max(PLAY.minX + margin, Math.min(PLAY.maxX - margin, p.x));
+  p.z = Math.max(PLAY.minZ + margin, Math.min(runtime.view.frontZ - margin, p.z));
+  p.y = Math.max(minY, Math.min(PLAY.maxY, p.y));
+  return p;
 }
 
 /**
@@ -175,6 +213,7 @@ export function Tools() {
       <HandTool register={register} />
       <BatTool register={register} />
       <LighterTool register={register} />
+      <GunTool register={register} />
     </>
   );
 }

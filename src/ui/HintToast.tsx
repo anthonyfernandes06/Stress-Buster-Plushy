@@ -5,6 +5,7 @@ const HINTS: Record<string, string> = {
   start: 'Drag the octopus. Flick to throw.',
   bat: 'Swipe to swing.',
   lighter: 'Hold to ignite.',
+  gun: 'Click to shoot. Hold for rapid fire.',
 };
 
 /** Contextual one-time hints. Each shows for 3 s, once per session. */
@@ -49,6 +50,7 @@ export function HintToast() {
     if (!started) return;
     if (tool === 'bat') show('bat');
     if (tool === 'lighter') show('lighter');
+    if (tool === 'gun') show('gun');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, started]);
 

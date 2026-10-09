@@ -5,7 +5,7 @@ import { Physics, useBeforePhysicsStep } from '@react-three/rapier';
 import { Bloom, EffectComposer, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
 import { Vector3, type DirectionalLight } from 'three';
-import { PHYSICS } from '../config';
+import { PHYSICS, ROOM } from '../config';
 import { runtime } from '../state/runtime';
 import { useStore } from '../state/store';
 import { CameraRig } from './CameraRig';
@@ -19,6 +19,8 @@ import { Rug } from './props/Rug';
 import { Lamp } from './props/Lamp';
 import { Plant } from './props/Plant';
 import { Window, SUN_DIR } from './props/Window';
+import { WallArt } from './props/WallArt';
+import { FairyLights } from './props/FairyLights';
 import { Plushy } from './plushy/Plushy';
 import { Tools } from './tools/Tools';
 import { Fx } from './fx/Fx';
@@ -40,16 +42,19 @@ function TimeScaler() {
   return null;
 }
 
+/** Middle of the sun patch the window throws on the floor. */
+const SUN_TARGET = new Vector3(-1.5, 0, 0);
+
 function Lights() {
   const sun = useRef<DirectionalLight>(null);
   const mobile = runtime.isMobile;
   useEffect(() => {
     const l = sun.current;
     if (!l) return;
-    l.target.position.set(-0.5, 0, 0.2);
+    l.target.position.copy(SUN_TARGET);
     l.target.updateMatrixWorld();
   }, []);
-  const sunPos = SUN_DIR.clone().multiplyScalar(16).add(new Vector3(-0.5, 0, 0.2));
+  const sunPos = SUN_DIR.clone().multiplyScalar(16).add(SUN_TARGET);
   return (
     <>
       <hemisphereLight args={['#FFF4E6', '#C9A27E', 0.98]} />
@@ -65,15 +70,15 @@ function Lights() {
         shadow-radius={4}
         shadow-bias={-0.0004}
         shadow-normalBias={0.025}
-        shadow-camera-left={-7}
-        shadow-camera-right={7}
-        shadow-camera-top={6}
-        shadow-camera-bottom={-6}
+        shadow-camera-left={-8}
+        shadow-camera-right={8}
+        shadow-camera-top={7}
+        shadow-camera-bottom={-7}
         shadow-camera-near={2}
         shadow-camera-far={32}
       />
       {/* soft room fill from the camera side, no shadows */}
-      <directionalLight position={[7, 9, 9]} color="#FFEBD6" intensity={0.85} />
+      <directionalLight position={[2.5, 7, 9]} color="#FFEBD6" intensity={0.85} />
     </>
   );
 }
@@ -141,6 +146,8 @@ export function Scene() {
           <Pouf />
           <Lamp />
           <Plant />
+          <WallArt />
+          <FairyLights />
           <Plushy />
           <Tools />
         </Physics>
@@ -148,7 +155,15 @@ export function Scene() {
 
       <Fx />
       <ContactShadowClearGuard />
-      <ContactShadows position={[0, 0.012, 0]} scale={8.4} resolution={512} blur={2.4} opacity={0.42} far={2} color="#3B2A1C" />
+      <ContactShadows
+        position={[0, 0.012, (ROOM.back + 2.4) / 2]}
+        scale={[ROOM.halfWidth * 2 + 0.2, 2.4 - ROOM.back]}
+        resolution={1024}
+        blur={2.4}
+        opacity={0.42}
+        far={2}
+        color="#3B2A1C"
+      />
       <PostFX />
     </>
   );

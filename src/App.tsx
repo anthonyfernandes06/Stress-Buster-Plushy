@@ -44,6 +44,9 @@ function useGlobalControls() {
         case '3':
           s.setTool('lighter');
           break;
+        case '4':
+          s.setTool('gun');
+          break;
         case 'r':
           s.reset();
           break;

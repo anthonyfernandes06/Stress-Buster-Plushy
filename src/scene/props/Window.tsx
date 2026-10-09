@@ -15,12 +15,12 @@ import { skyTexture, softDot } from '../textures';
 import { FX_LAYER } from '../layers';
 
 /** Window opening in the left wall (world units). */
-export const WINDOW = { z0: -1.05, z1: 0.45, y0: 1.0, y1: 2.6 };
+export const WINDOW = { z0: -1.3, z1: 0.3, y0: 1.1, y1: 2.75 };
 
 /** Direction *towards* the low afternoon sun. */
 export const SUN_DIR = new Vector3(-8, 5, -1.6).normalize();
 
-const H = ROOM.half;
+const H = ROOM.halfWidth;
 const T = ROOM.wallThickness;
 
 /**
